@@ -20,12 +20,7 @@ It runs entirely on your Mac. Nothing is uploaded.
 - **Mix:** each layer has mute, solo and volume.
 - **Export** every layer as a WAV, plus your mix.
 
-**In DaVinci Resolve:**
-1. Mark In and Out around the noise (keys **I** and **O**).
-2. Go to **Workspace › Scripts › Hush - Remove a Sound**.
-3. Type what the sound is and press **Return**.
-
-The cleaned clip lands in sync on a **Hush** track, and the original audio is switched off, not deleted.
+**In DaVinci Resolve:** select a clip, then go to **Workspace › Scripts › Hush - Extract Layers**. Each sound Hush finds lands on its own audio track, in sync and named after the sound (Horns, Traffic, Wind…). The voice stays on **Voice & rest**. Mute a track to remove that sound. The original clip's audio is switched off, not deleted, and the clip stays orange while Hush works.
 
 ## Install
 
@@ -58,7 +53,7 @@ In Resolve, use the script under **Workspace › Scripts**. The installer puts i
 1. **Listening.** Apple's built-in sound classifier (SoundAnalysis) listens in 1-second steps and reports what it hears, for example "speech 96%, car horn 80%". That becomes the sound map. A minute of audio takes about a second, and nothing needs downloading.
 2. **Pulling a sound out.** [SAM Audio](https://github.com/facebookresearch/sam-audio), Meta's model that separates sounds by name, runs only on the moments where that sound was found. It returns two things: the sound itself and everything else. The sound becomes a new layer, and "Everything else" loses it.
 3. **Instant splits.** Ordinary signal processing (spectrogram masks) splits a layer by pitch range, by hits vs sustained sounds, by loudness, or by the box you drag. These parts add back up to the original exactly.
-4. **Resolve.** Resolve's free version can't run Python or show windows from a script. So the Resolve script hands the clip over through a file Resolve writes itself, macOS starts Hush, Hush asks what the sound is, and the script places the result back on the timeline.
+4. **Resolve.** Resolve's free version can't run Python or show windows from a script. So the Resolve script hands the clip over through a file Resolve writes itself, and macOS starts Hush. Hush maps and splits the clip, then the script places each layer on its own track as soon as it's ready.
 
 ```
 recording ──► sound map (Apple, ~1 s/min) ──► click a sound ──► SAM Audio ──► new layer
@@ -70,8 +65,8 @@ recording ──► sound map (Apple, ~1 s/min) ──► click a sound ──�
 | `studio/server.py` + `studio/index.html` | Hush Studio: the visual editor |
 | `studio/soundmap.swift` | The sound map (Apple's classifier) |
 | `hush.py` | The engine: SAM Audio, memory safety, the Resolve job runner |
-| `Hush - Remove a Sound.lua` | The Resolve script |
-| `ask.swift` | The small "What is this sound?" panel for Resolve |
+| `Hush - Extract Layers.lua` | The Resolve script |
+| `ask.swift` | The small message panel Resolve uses for errors |
 | `install.sh`, `studio.sh` | Install / uninstall, open Studio |
 
 ## Good to know
