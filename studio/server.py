@@ -25,51 +25,8 @@ import hush  # noqa: E402
 
 PORT = 8740
 STUDIO = Path(__file__).resolve().parent
-SOUNDMAP = STUDIO.parent / ".build/soundmap"
 PROJECTS = Path.home() / "Movies/Hush/Studio"
 SR = hush.SR
-
-# Apple's 300 sound types, folded into layers people recognise. (name, SAM Audio prompt, classes)
-INSTRUMENTS = ("plucked_string_instrument guitar electric_guitar bass_guitar acoustic_guitar steel_guitar_slide_guitar "
-               "guitar_tapping guitar_strum banjo sitar mandolin zither ukulele keyboard_musical piano electric_piano organ "
-               "electronic_organ hammond_organ synthesizer harpsichord percussion drum_kit drum snare_drum bass_drum timpani "
-               "tabla cymbal hi_hat tambourine rattle_instrument gong mallet_percussion marimba_xylophone glockenspiel "
-               "vibraphone steelpan orchestra brass_instrument french_horn trumpet trombone bowed_string_instrument "
-               "violin_fiddle cello double_bass wind_instrument flute saxophone clarinet oboe bassoon harp harmonica "
-               "accordion bagpipes didgeridoo shofar theremin singing_bowl disc_scratching")
-GROUPS = [
-    ("Voice", "a person speaking", "speech shout yell battle_cry children_shouting screaming whispering laughter "
-     "baby_laughter giggling snicker belly_laugh chuckle_chortle crying_sobbing baby_crying sigh rapping humming"),
-    ("Horns", "car horn honking", "car_horn air_horn train_horn foghorn reverse_beeps bicycle_bell"),
-    ("Sirens", "siren", "emergency_vehicle police_siren ambulance_siren fire_engine_siren siren civil_defense_siren"),
-    ("Traffic", "traffic noise", "traffic_noise car_passing_by truck bus motorcycle race_car vehicle_skidding "
-     "power_windows engine engine_knocking engine_starting engine_idling engine_accelerating_revving"),
-    ("Trains & planes", "train and aircraft noise", "rail_transport train train_whistle railroad_car "
-     "train_wheels_squealing subway_metro aircraft helicopter airplane"),
-    ("Crowd", "crowd chatter", "crowd chatter babble cheering applause booing clapping"),
-    ("Music", "music", "music singing choir_singing yodeling whistling " + INSTRUMENTS),
-    ("Wind", "wind noise", "wind wind_rustling_leaves wind_noise_microphone"),
-    ("Water & rain", "water and rain", "thunderstorm thunder water rain raindrop stream_burbling waterfall ocean "
-     "sea_waves gurgling boat_water_vehicle"),
-    ("Birds", "birds chirping", "bird bird_vocalization bird_chirp_tweet bird_squawk pigeon_dove_coo crow_caw owl_hoot "
-     "bird_flapping fowl chicken chicken_cluck rooster_crow turkey_gobble duck_quack goose_honk"),
-    ("Animals", "animal sounds", "dog dog_bark dog_howl dog_bow_wow dog_growl dog_whimper cat cat_purr cat_meow "
-     "horse_clip_clop horse_neigh cow_moo pig_oink sheep_bleat lion_roar frog frog_croak coyote_howl"),
-    ("Insects", "insects buzzing", "insect cricket_chirp mosquito_buzz fly_buzz bee_buzz"),
-    ("Fan & AC hum", "fan and air conditioner hum", "mechanical_fan air_conditioner hair_dryer vacuum_cleaner "
-     "blender microwave_oven"),
-    ("Footsteps", "footsteps", "person_running person_shuffling person_walking"),
-    ("Knocks & bangs", "knocking and banging", "door door_slam knock tap thump_thud slap_smack hammer "
-     "bowling_impact basketball_bounce glass_clink"),
-    ("Phones & beeps", "phone ringing and beeps", "telephone telephone_bell_ringing ringtone alarm_clock beep "
-     "smoke_detector door_bell"),
-    ("Coughs & breath", "coughing and breathing", "breathing snoring gasp cough sneeze nose_blowing"),
-    ("Typing & clicks", "typing and clicking", "typing typewriter typing_computer_keyboard click writing"),
-    ("Tools", "power tool noise", "power_tool drill saw chainsaw lawn_mower hedge_trimmer sewing_machine"),
-]
-GROUP_OF = {c: g[0] for g in GROUPS for c in g[2].split()}
-PROMPT_OF = {g[0]: g[1] for g in GROUPS}
-
 
 # --- audio helpers -------------------------------------------------------------------------------
 
@@ -154,41 +111,6 @@ def spectrogram_image(audio, width=1600, height=220):
     return (db[::-1] * 255).astype(np.uint8), cols, height
 
 
-def sound_map(wav):
-    """Lanes of detected sounds: per lane a confidence curve (one value per 0.5 s) and merged segments."""
-    raw = json.loads(subprocess.run([str(SOUNDMAP), str(wav)], capture_output=True, check=True).stdout)
-    frames = raw["frames"]
-    curves = {}
-    for i, (_, scores) in enumerate(frames):
-        for cls, conf in scores.items():
-            if cls == "silence":
-                continue
-            name = GROUP_OF.get(cls) or ("Knocks & bangs" if cls.startswith(("playing_", "rope_")) else
-                                         cls.replace("_", " ").capitalize())
-            curve = curves.setdefault(name, np.zeros(len(frames)))
-            curve[i] = max(curve[i], conf)
-    lanes = []
-    for name, curve in curves.items():
-        on = curve > 0.3
-        if on.sum() < 2 or curve.max() < 0.5:
-            continue
-        segments, start = [], None
-        for i, v in enumerate(list(on) + [False]):
-            if v and start is None:
-                start = i
-            if not v and start is not None:
-                a, b = start * raw["hop"], (i - 1) * raw["hop"] + 1.0
-                if segments and a - segments[-1][1] < 0.5:
-                    segments[-1][1] = b
-                else:
-                    segments.append([a, b])
-                start = None
-        lanes.append({"name": name, "prompt": PROMPT_OF.get(name, name.lower()), "segments": segments,
-                      "curve": [round(float(v), 2) for v in curve], "seconds": float(on.sum() * raw["hop"])})
-    lanes.sort(key=lambda l: -l["seconds"])
-    return {"hop": raw["hop"], "lanes": lanes[:10]}
-
-
 # --- the open recording ----------------------------------------------------------------------------
 
 class Project:
@@ -197,15 +119,12 @@ class Project:
         self.name = source.name
         self.dir = PROJECTS / f"{source.stem}-{time.strftime('%Y%m%d-%H%M%S')}"
         (self.dir / "layers").mkdir(parents=True, exist_ok=True)
-        probe = subprocess.run([hush.FFMPEG, "-nostdin", "-i", str(source)], capture_output=True, text=True).stderr
-        dur = next((l.split("Duration:")[1].split(",")[0].strip() for l in probe.splitlines() if "Duration:" in l), None)
-        if not dur or dur == "N/A":
+        audio = hush.read_audio(source)
+        if not len(audio):
             raise ValueError("That file has no readable audio.")
-        h, m, s = dur.split(":")
-        audio = hush.read_audio(str(source), 0, int(h) * 3600 + int(m) * 60 + float(s))
         self.duration = len(audio) / SR
         hush.write_wav(self.dir / "original.wav", audio)
-        self.map = sound_map(self.dir / "original.wav")
+        self.map = hush.sound_map(audio)
         self.spectrogram = spectrogram_image(audio)
         self.layers = []  # dicts: id, name, kind, version; audio kept in self.audio
         self.audio = {}
@@ -253,33 +172,12 @@ def extract_ai(source, name, prompt, ranges):
     """Pull `prompt` out of layer `source` within the time ranges, into a new layer, with SAM Audio."""
     try:
         job.update(busy=True, progress=0, error=None, message=f"Getting ready to extract {name}…")
-        text = hush.encode_prompt(prompt)
+        text = hush.encode_prompts([prompt])[0]
         if model["sam"] is None:
             job["message"] = "Loading SAM Audio…"
             model["sam"] = hush.load_model()
-        audio = project.audio[source]
-        sound, rest = np.zeros_like(audio), audio.copy()
-        merged = []
-        for a, b in sorted(ranges):  # pad a little and merge overlaps
-            a, b = max(0.0, a - 0.3), min(project.duration, b + 0.3)
-            if merged and a <= merged[-1][1]:
-                merged[-1][1] = max(merged[-1][1], b)
-            else:
-                merged.append([a, b])
-        total = sum(b - a for a, b in merged) or 1
-        done = 0.0
-        for a, b in merged:
-            i, j = int(a * SR), int(b * SR)
-            span = b - a
-            report = lambda k, n: job.update(progress=(done + span * k / n) / total,  # noqa: E731
-                                             message=f"Extracting {name}… {(done + span * k / n):.0f} of {total:.0f} s")
-            target, residual = hush.separate(model["sam"], audio[i:j].mean(axis=1), text, on_chunk=report)
-            fade = np.ones(j - i, np.float32)  # 30 ms fades into the untouched audio around each range
-            ramp = min(int(0.03 * SR), (j - i) // 2)
-            fade[:ramp], fade[len(fade) - ramp:] = np.linspace(0, 1, ramp), np.linspace(1, 0, ramp)
-            sound[i:j] = target[:, None] * fade[:, None]
-            rest[i:j] = audio[i:j] * (1 - fade[:, None]) + residual[:, None] * fade[:, None]
-            done += span
+        progress = lambda f: job.update(progress=f, message=f"Extracting {name}… {round(f * 100)}%")  # noqa: E731
+        sound, rest = hush.extract(model["sam"], project.audio[source], text, ranges, on_progress=progress)
         with lock:
             project.add_layer(name, sound, kind="ai", after=source)
             project.set_audio(source, rest)

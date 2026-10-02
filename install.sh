@@ -8,7 +8,7 @@ AGENT="$HOME/Library/LaunchAgents/com.hush.resolve.plist"
 
 if [ "${1:-}" = "--uninstall" ]; then
   launchctl bootout "gui/$(id -u)" "$AGENT" 2>/dev/null || true
-  rm -rf "$AGENT" "$SCRIPTS/Hush - Remove a Sound.lua" "$HOME/Library/Application Support/Hush" .venv .build
+  rm -rf "$AGENT" "$SCRIPTS/Hush - Extract Layers.lua" "$HOME/Library/Application Support/Hush" .venv .build
   echo "Hush removed. Your cleaned audio in ~/Movies/Hush was kept."
   exit
 fi
@@ -24,7 +24,7 @@ from huggingface_hub import snapshot_download as get
 get('mlx-community/sam-audio-small-fp16')
 get('t5-base', allow_patterns=['*.json', 'model.safetensors', 'spiece.model'])" 2>/dev/null
 
-echo "2/4  The 'What is this sound?' panel"
+echo "2/4  The sound map and the message panel"
 APP=".build/Hush Ask.app"
 rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS"
 swiftc -O ask.swift -o "$APP/Contents/MacOS/ask"
@@ -44,7 +44,8 @@ swiftc -O studio/soundmap.swift -o .build/soundmap  # Studio's sound map
 
 echo "3/4  The Resolve script"
 mkdir -p "$SCRIPTS"
-cp "Hush - Remove a Sound.lua" "$SCRIPTS/"
+rm -f "$SCRIPTS/Hush - Remove a Sound.lua"  # older version
+cp "Hush - Extract Layers.lua" "$SCRIPTS/"
 
 echo "4/4  The background job (macOS starts it only when Resolve sends work)"
 mkdir -p "$HOME/Library/Application Support/Hush/inbox" "$HOME/Library/LaunchAgents"
@@ -64,4 +65,4 @@ launchctl bootstrap "gui/$(id -u)" "$AGENT"
 echo
 echo "Done!"
 echo "  Studio (any recording):  ./studio.sh"
-echo "  In Resolve:              mark In and Out around a sound, then Workspace > Scripts > Hush - Remove a Sound"
+echo "  In Resolve:              select a clip, then Workspace > Scripts > Hush - Extract Layers"
