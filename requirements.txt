@@ -1,0 +1,6 @@
+mlx-audio==0.5.7
+mlx==0.32.3
+numpy==2.5.3
+soundfile==0.14.0
+sentencepiece==0.2.2
+huggingface-hub==1.33.0

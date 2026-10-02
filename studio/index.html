@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hush Studio</title>
+<style>
+  :root {
+    --bg: #101113; --panel: #17181b; --panel2: #1d1f23; --line: #2a2c31; --text: #ececee; --dim: #9b9da4;
+    --accent: #ff8a3d; --accent-soft: rgba(255,138,61,.16); --gutter: 178px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; }
+  button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: #43464d; background: #23252a; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #1a0d03; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: #ff9d5c; }
+  input[type=text] { font: inherit; color: var(--text); background: #0d0e10; border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 10px; outline: none; }
+  input[type=text]:focus { border-color: var(--accent); }
+
+  .app { display: grid; grid-template-rows: 54px 3px 1fr auto; height: 100%; }
+  header { display: flex; align-items: center; gap: 14px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+  .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
+  .logo i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+  .file { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .spacer { flex: 1; }
+  .progress { background: transparent; }
+  .progress div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+
+  main { display: grid; grid-template-columns: 290px 1fr; min-height: 0; }
+  aside { border-right: 1px solid var(--line); overflow-y: auto; padding: 14px 12px; }
+  aside h2, .tracks h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 0 0 10px 4px; font-weight: 600; }
+  .layer { border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px 8px; margin-bottom: 8px; background: var(--panel); cursor: pointer; }
+  .layer.sel { border-color: var(--accent); background: #1c1a18; }
+  .layer.off { opacity: .45; }
+  .layer .top { display: flex; align-items: center; gap: 8px; }
+  .layer .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .layer .name { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .layer .ms { padding: 2px 7px; font-size: 12px; border-radius: 6px; }
+  .layer .ms.on { background: var(--accent); color: #1a0d03; border-color: var(--accent); }
+  .layer canvas { width: 100%; height: 30px; display: block; margin-top: 7px; }
+  .layer input[type=range] { width: 100%; margin: 6px 0 0; accent-color: var(--accent); }
+  .hint { color: var(--dim); font-size: 12px; margin: 10px 4px; }
+
+  .tracks { overflow-y: auto; padding: 14px 18px 18px 0; position: relative; }
+  .row { display: grid; grid-template-columns: var(--gutter) 1fr; align-items: stretch; }
+  .row .label { padding: 0 12px 0 18px; display: flex; align-items: center; color: var(--dim); font-size: 12px; gap: 8px; }
+  .row canvas { width: 100%; display: block; border-radius: 6px; background: #0b0c0e; }
+  .ruler canvas { height: 22px; background: transparent; }
+  .wave canvas { height: 84px; }
+  .spec canvas { height: 230px; cursor: crosshair; }
+  .tracks .lanes-title { margin: 26px 0 10px 18px; }
+  .lane { margin-bottom: 4px; }
+  .lane .label { cursor: pointer; color: var(--text); font-weight: 600; border-radius: 6px 0 0 6px; white-space: nowrap; }
+  .lane .label i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .lane .label small { color: var(--dim); font-weight: 400; margin-left: auto; }
+  .lane.sel .label { background: var(--accent-soft); }
+  .lane canvas { height: 26px; cursor: pointer; }
+
+  .bar { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 64px; }
+  .play { width: 40px; height: 40px; border-radius: 50%; padding: 0; font-size: 15px; }
+  .time { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 92px; }
+  .ctx { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; }
+  .ctx b { font-weight: 600; }
+  .ctx .muted { color: var(--dim); }
+  .by-name { display: flex; gap: 8px; }
+  .by-name input { width: 220px; }
+  .status { color: var(--dim); font-size: 13px; }
+  .status.err { color: #ff6b6b; }
+
+  .drop { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(16,17,19,.94); z-index: 10; }
+  .drop .card { text-align: center; max-width: 520px; padding: 48px 40px; border: 2px dashed #3a3d44; border-radius: 22px; }
+  .drop.over .card { border-color: var(--accent); background: var(--accent-soft); }
+  .drop h1 { font-size: 26px; margin: 0 0 10px; }
+  .drop p { color: var(--dim); margin: 0 0 22px; }
+  .spin { width: 28px; height: 28px; border: 3px solid #333; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo"><i></i>Hush</div>
+    <div class="file" id="file"></div>
+    <div class="spacer"></div>
+    <button id="open">Open recording…</button>
+    <button class="primary" id="export" disabled>Export layers</button>
+  </header>
+  <div class="progress"><div id="progress"></div></div>
+  <main>
+    <aside>
+      <h2>Layers</h2>
+      <div id="layers"></div>
+      <p class="hint">Mute a layer to remove that sound. Solo it to hear only it. Everything you pull out comes out of “Everything else”.</p>
+    </aside>
+    <section class="tracks" id="tracks">
+      <div class="row ruler"><div></div><canvas id="ruler"></canvas></div>
+      <div class="row wave"><div class="label">What you hear</div><canvas id="wave"></canvas></div>
+      <div class="row spec" style="margin-top:8px"><div class="label">Pitch<br>high ↑ low ↓</div><canvas id="spec"></canvas></div>
+      <h2 class="lanes-title">What’s in this recording</h2>
+      <div id="lanes"></div>
+    </section>
+  </main>
+  <div class="bar">
+    <button class="play" id="play" title="Play / pause (space)">▶</button>
+    <div class="time" id="time">0:00.0</div>
+    <div class="ctx" id="ctx"></div>
+    <div class="by-name">
+      <input type="text" id="name" placeholder="Extract a sound by name…">
+      <button id="byname" disabled>Extract</button>
+    </div>
+  </div>
+</div>
+<div class="drop" id="drop">
+  <div class="card" id="dropcard">
+    <h1>Drop a recording here</h1>
+    <p>MP3, WAV, a voice memo, or a video. Hush shows what sounds are inside, then lets you pull each one out into its own layer.</p>
+    <button class="primary" id="choose">Choose a file</button>
+  </div>
+</div>
+<input type="file" id="picker" accept="audio/*,video/*" hidden>
+
+<script>
+const COLORS = { "Voice": "#6ea8ff", "Horns": "#ff5d5d", "Traffic": "#ffb347", "Music": "#c38bff", "Wind": "#5fd4c4",
+  "Birds": "#9be15d", "Insects": "#e2d35a", "Crowd": "#ff7fbf", "Water & rain": "#4fc3f7", "Sirens": "#ff4f8b",
+  "Animals": "#d0a070", "Fan & AC hum": "#7fd6ff", "Everything else": "#8a8d93" };
+const EXTRA = ["#f4a261", "#2ec4b6", "#e76f51", "#a8dadc", "#ffd166", "#b5838d", "#90be6d", "#f28482"];
+const $ = (id) => document.getElementById(id);
+let P = null;                 // project from the server
+let sel = null;               // {type: "lane"|"range"|"box"|"layer", ...}
+let ctx = null, buffers = {}, sources = [], gains = {}, state = {};  // playback
+let playing = false, startedAt = 0, offset = 0;
+let specImg = null;
+let job = { busy: false };  // the running AI extract, if any
+
+const colorOf = (name, i = 0) => COLORS[name] || COLORS[name.split(" · ")[0]] || EXTRA[i % EXTRA.length];
+const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
+const now = () => playing ? Math.min(P.duration, offset + ctx.currentTime - startedAt) : offset;
+const api = async (path, body) => {
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+function status(text, err = false) {
+  const el = $("ctx");
+  el.innerHTML = `<span class="status ${err ? "err" : ""}">${text}</span>`;
+}
+
+// ---- loading a recording ------------------------------------------------------------------------
+async function upload(file) {
+  $("dropcard").innerHTML = `<div class="spin"></div><h1>Listening to ${file.name}…</h1><p>Finding what sounds are inside. This takes a few seconds.</p>`;
+  $("drop").hidden = false;
+  try {
+    const r = await fetch(`/api/upload?name=${encodeURIComponent(file.name)}`, { method: "POST", body: file });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    await show(j, true);
+  } catch (e) {
+    $("dropcard").innerHTML = `<h1>That didn’t work</h1><p>${e.message}</p><button class="primary" onclick="location.reload()">Try another file</button>`;
+  }
+}
+
+async function show(project, fresh) {
+  if (fresh) { stop(); offset = 0; buffers = {}; state = {}; sel = null; }
+  P = project;
+  $("drop").hidden = true;
+  $("file").textContent = `${P.name} · ${fmt(P.duration)}`;
+  $("export").disabled = $("byname").disabled = false;
+  if (fresh) await loadSpectrogram();
+  await loadBuffers();
+  renderLayers(); renderLanes(); renderCtx(); draw();
+}
+
+async function loadSpectrogram() {
+  const r = await fetch("/api/spectrogram");
+  const w = +r.headers.get("X-Width"), h = +r.headers.get("X-Height");
+  const data = new Uint8Array(await r.arrayBuffer());
+  const stops = [[0, [8, 8, 12]], [.3, [59, 15, 112]], [.55, [140, 41, 129]], [.75, [222, 73, 104]], [.9, [254, 159, 109]], [1, [252, 253, 191]]];
+  const lut = [...Array(256)].map((_, i) => {
+    const v = i / 255, k = stops.findIndex(([s]) => s >= v);
+    const [s0, c0] = stops[Math.max(0, k - 1)], [s1, c1] = stops[k];
+    const f = s1 === s0 ? 0 : (v - s0) / (s1 - s0);
+    return c0.map((c, j) => c + (c1[j] - c) * f);
+  });
+  const img = new ImageData(w, h);
+  for (let i = 0; i < w * h; i++) { const c = lut[data[i]]; img.data.set([c[0], c[1], c[2], 255], i * 4); }
+  specImg = document.createElement("canvas");
+  specImg.width = w; specImg.height = h;
+  specImg.getContext("2d").putImageData(img, 0, 0);
+}
+
+async function loadBuffers() {
+  ctx = ctx || new AudioContext({ sampleRate: 48000 });
+  for (const l of P.layers) {
+    const key = `${l.id}:${l.version}`;
+    if (buffers[l.id]?.key === key) continue;
+    const data = await (await fetch(`/audio/${l.id}.wav?v=${l.version}`)).arrayBuffer();
+    buffers[l.id] = { key, buf: await ctx.decodeAudioData(data), peaks: null };
+    state[l.id] = state[l.id] || { mute: false, solo: false, vol: 1 };
+  }
+  for (const id of Object.keys(buffers)) if (!P.layers.find((l) => l.id === id)) delete buffers[id];
+  if (playing) { const t = now(); stop(); play(t); }
+}
+
+// ---- playback -----------------------------------------------------------------------------------
+function level(id) {
+  const anySolo = P.layers.some((l) => state[l.id]?.solo);
+  const s = state[id];
+  return (anySolo ? s.solo : !s.mute) ? s.vol : 0;
+}
+function applyGains() {
+  for (const l of P.layers) if (gains[l.id]) gains[l.id].gain.setTargetAtTime(level(l.id), ctx.currentTime, 0.02);
+  renderLayers(); draw(true);
+}
+function play(from = now()) {
+  if (!P) return;
+  ctx.resume();
+  if (from >= P.duration - 0.05) from = 0;
+  sources = []; gains = {};
+  for (const l of P.layers) {
+    const src = ctx.createBufferSource(), g = ctx.createGain();
+    src.buffer = buffers[l.id].buf; g.gain.value = level(l.id);
+    src.connect(g).connect(ctx.destination);
+    src.start(0, from);
+    sources.push(src); gains[l.id] = g;
+  }
+  offset = from; startedAt = ctx.currentTime; playing = true;
+  $("play").textContent = "❚❚";
+  sources[0].onended = () => { if (playing && now() >= P.duration - 0.05) { stop(); offset = 0; } };
+}
+function stop() {
+  if (playing) offset = now();
+  sources.forEach((s) => { try { s.stop(); } catch {} });
+  sources = []; playing = false;
+  $("play").textContent = "▶";
+}
+function seek(t) { const was = playing; stop(); offset = Math.max(0, Math.min(P.duration, t)); if (was) play(offset); draw(); }
+
+// ---- drawing ------------------------------------------------------------------------------------
+function fit(c) {
+  const r = c.getBoundingClientRect(), d = devicePixelRatio;
+  if (c.width !== Math.round(r.width * d) || c.height !== Math.round(r.height * d)) { c.width = r.width * d; c.height = r.height * d; }
+  const g = c.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0);
+  return [g, r.width, r.height];
+}
+function peaksOf(id, cols) {
+  const b = buffers[id];
+  if (b.peaks && b.peaks.length === cols) return b.peaks;
+  const chans = [b.buf.getChannelData(0), b.buf.getChannelData(b.buf.numberOfChannels - 1)];
+  const step = chans[0].length / cols, out = new Float32Array(cols);
+  for (let x = 0; x < cols; x++) {
+    let m = 0;
+    for (let i = Math.floor(x * step), e = Math.floor((x + 1) * step); i < e; i += 4) m = Math.max(m, Math.abs(chans[0][i] + chans[1][i]) / 2);
+    out[x] = m;
+  }
+  return (b.peaks = out);
+}
+function overlays(g, w, h, withPlayhead = true) {
+  const x = (t) => (t / P.duration) * w;
+  if (sel?.type === "lane") for (const [a, b] of sel.lane.segments) { g.fillStyle = "rgba(255,138,61,.13)"; g.fillRect(x(a), 0, x(b) - x(a), h); }
+  if (sel?.type === "range" || sel?.type === "box") { g.fillStyle = "rgba(255,138,61,.15)"; g.fillRect(x(sel.t0), 0, x(sel.t1) - x(sel.t0), h); }
+  if (withPlayhead) { g.fillStyle = "#fff"; g.fillRect(x(now()) - 0.5, 0, 1.5, h); }
+}
+let waveCache = null;
+function draw(rebuildWave = false) {
+  if (!P) return;
+  // ruler
+  let [g, w, h] = fit($("ruler"));
+  g.clearRect(0, 0, w, h); g.fillStyle = "#6c6f76"; g.font = "11px -apple-system";
+  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300].find((s) => (s / P.duration) * w > 70) || 600;
+  for (let t = 0; t <= P.duration; t += step) { const xx = (t / P.duration) * w; g.fillRect(xx, h - 6, 1, 6); g.fillText(fmt(t).replace(/\.0$/, ""), xx + 3, h - 8); }
+  // waveform of what you hear
+  [g, w, h] = fit($("wave"));
+  const cols = Math.floor(w);
+  if (rebuildWave || !waveCache || waveCache.length !== cols) {
+    waveCache = new Float32Array(cols);
+    P.layers.forEach((l) => { const lv = level(l.id); if (lv > 0) peaksOf(l.id, cols).forEach((v, i) => (waveCache[i] += v * lv)); });
+  }
+  g.clearRect(0, 0, w, h); g.fillStyle = "#c9cbd1";
+  for (let i = 0; i < cols; i++) { const v = Math.min(1, waveCache[i]) * (h / 2 - 2); g.fillRect(i, h / 2 - v, 1, v * 2 || 1); }
+  overlays(g, w, h);
+  // spectrogram
+  [g, w, h] = fit($("spec"));
+  g.imageSmoothingEnabled = true; g.drawImage(specImg, 0, 0, w, h);
+  overlays(g, w, h);
+  if (sel?.type === "box") {
+    const y = (f) => h - (Math.log(f / 40) / Math.log(18000 / 40)) * h;
+    const x0 = (sel.t0 / P.duration) * w, x1 = (sel.t1 / P.duration) * w;
+    g.strokeStyle = "#ff8a3d"; g.lineWidth = 2; g.setLineDash([5, 4]);
+    g.strokeRect(x0, y(sel.f1), x1 - x0, y(sel.f0) - y(sel.f1)); g.setLineDash([]);
+  }
+  // lanes
+  document.querySelectorAll(".lane canvas").forEach((c, i) => {
+    const lane = P.map.lanes[i]; [g, w, h] = fit(c);
+    g.clearRect(0, 0, w, h);
+    const col = colorOf(lane.name, i), cw = (P.map.hop / P.duration) * w;
+    lane.curve.forEach((v, k) => { if (v > 0.12) { g.globalAlpha = Math.min(1, v * 1.1); g.fillStyle = col; g.fillRect((k * P.map.hop / P.duration) * w, 3, cw + 0.5, h - 6); } });
+    g.globalAlpha = 1; overlays(g, w, h);
+  });
+  // layer mini waveforms
+  document.querySelectorAll(".layer canvas").forEach((c) => {
+    const l = P.layers.find((x) => x.id === c.dataset.id); [g, w, h] = fit(c);
+    const pk = peaksOf(l.id, Math.floor(w)); g.clearRect(0, 0, w, h); g.fillStyle = colorOf(l.name, P.layers.indexOf(l));
+    pk.forEach((v, i) => { const a = Math.min(1, v * 1.4) * (h / 2); g.fillRect(i, h / 2 - a, 1, a * 2 || 1); });
+    g.fillStyle = "#fff"; g.fillRect((now() / P.duration) * w, 0, 1, h);
+  });
+  $("time").textContent = fmt(now());
+}
+function loop() { if (playing) draw(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+addEventListener("resize", () => draw(true));
+
+// ---- panels -------------------------------------------------------------------------------------
+function renderLayers() {
+  $("layers").innerHTML = "";
+  P.layers.forEach((l, i) => {
+    const s = state[l.id], el = document.createElement("div");
+    el.className = `layer ${sel?.type === "layer" && sel.id === l.id ? "sel" : ""} ${level(l.id) === 0 ? "off" : ""}`;
+    el.innerHTML = `<div class="top"><span class="dot" style="background:${colorOf(l.name, i)}"></span>
+      <span class="name" title="Double-click to rename">${l.name}</span>
+      <button class="ms ${s.mute ? "on" : ""}" title="Mute">M</button><button class="ms ${s.solo ? "on" : ""}" title="Solo">S</button></div>
+      <canvas data-id="${l.id}"></canvas>
+      <input type="range" min="0" max="1.5" step="0.01" value="${s.vol}" title="Volume">`;
+    const [m, so] = el.querySelectorAll(".ms");
+    m.onclick = (e) => { e.stopPropagation(); s.mute = !s.mute; applyGains(); };
+    so.onclick = (e) => { e.stopPropagation(); s.solo = !s.solo; applyGains(); };
+    el.querySelector("input").oninput = (e) => { s.vol = +e.target.value; applyGains(); };
+    el.querySelector("input").onclick = (e) => e.stopPropagation();
+    el.onclick = () => { sel = { type: "layer", id: l.id }; renderLayers(); renderCtx(); draw(); };
+    el.querySelector(".name").ondblclick = async () => {
+      const name = prompt("Rename layer", l.name);
+      if (name) show(await api("/api/rename", { id: l.id, name }));
+    };
+    $("layers").append(el);
+  });
+}
+
+function renderLanes() {
+  $("lanes").innerHTML = P.map.lanes.length ? "" : `<p class="hint" style="margin-left:18px">No clear sounds found. Drag over the pitch view to pick a part by hand.</p>`;
+  P.map.lanes.forEach((lane, i) => {
+    const row = document.createElement("div");
+    row.className = `row lane ${sel?.type === "lane" && sel.lane === lane ? "sel" : ""}`;
+    row.innerHTML = `<div class="label"><i style="background:${colorOf(lane.name, i)}"></i>${lane.name}<small>${Math.round(lane.seconds)}s</small></div><canvas></canvas>`;
+    row.querySelector(".label").onclick = () => { sel = { type: "lane", lane }; renderLanes(); renderCtx(); draw(); };
+    $("lanes").append(row);
+  });
+  bindDrag();
+}
+
+function renderCtx() {
+  const c = $("ctx");
+  const busy = job.busy;
+  if (!P) return (c.innerHTML = "");
+  if (sel?.type === "lane") {
+    const n = sel.lane.segments.length;
+    c.innerHTML = `<b>${sel.lane.name}</b><span class="muted">heard in ${n} place${n > 1 ? "s" : ""}, ${Math.round(sel.lane.seconds)} s</span>
+      <button class="primary" id="go" ${busy ? "disabled" : ""}>Extract ${sel.lane.name} to a layer</button>
+      <button id="hear">Listen</button>`;
+    $("go").onclick = () => extract(sel.lane.name, sel.lane.prompt, sel.lane.segments);
+    $("hear").onclick = () => { stop(); play(sel.lane.segments[0][0]); };
+  } else if (sel?.type === "range" || sel?.type === "box") {
+    const f = (x) => (x >= 1000 ? `${(x / 1000).toFixed(1)} kHz` : `${Math.round(x)} Hz`);
+    c.innerHTML = `<b>${fmt(sel.t0)} – ${fmt(sel.t1)}</b>${sel.type === "box" ? `<span class="muted">${f(sel.f0)} – ${f(sel.f1)}</span>
+      <button class="primary" id="box" ${busy ? "disabled" : ""}>Cut this box into a layer</button>` : ""}
+      <span class="muted">or type a sound’s name and press Extract to find it only here →</span>`;
+    if ($("box")) $("box").onclick = () => split("box", rest().id, { t0: sel.t0, t1: sel.t1, f0: sel.f0, f1: sel.f1 });
+  } else if (sel?.type === "layer") {
+    const l = P.layers.find((x) => x.id === sel.id);
+    c.innerHTML = `<b>${l.name}</b><span class="muted">split it:</span>
+      <button data-k="bands">Lows · Mids · Highs</button><button data-k="hits">Hits · Sustained</button><button data-k="loud">Loud · Quiet</button>
+      ${l.kind !== "rest" ? `<button id="back">Put back</button>` : ""}`;
+    c.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => split(b.dataset.k, l.id)));
+    if ($("back")) $("back").onclick = async () => { sel = null; show(await api("/api/remove", { id: l.id })); };
+  } else {
+    c.innerHTML = `<span class="muted">Click a sound below to pull it out, drag across the pitch view to pick any part, or click a layer to split it.</span>`;
+  }
+}
+const rest = () => P.layers.find((l) => l.kind === "rest");
+
+// ---- selecting by dragging ----------------------------------------------------------------------
+function bindDrag() {
+  const targets = [$("wave"), $("spec"), ...document.querySelectorAll(".lane canvas")];
+  targets.forEach((c) => {
+    c.onpointerdown = (e) => {
+      const r = c.getBoundingClientRect(), isSpec = c === $("spec");
+      const tAt = (ev) => Math.max(0, Math.min(P.duration, ((ev.clientX - r.left) / r.width) * P.duration));
+      const fAt = (ev) => 40 * Math.pow(18000 / 40, 1 - Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height)));
+      const t0 = tAt(e), f0 = fAt(e);
+      let moved = false;
+      c.setPointerCapture(e.pointerId);
+      c.onpointermove = (ev) => {
+        const t1 = tAt(ev);
+        if (Math.abs(ev.clientX - e.clientX) < 4 && Math.abs(ev.clientY - e.clientY) < 4) return;
+        moved = true;
+        sel = isSpec ? { type: "box", t0: Math.min(t0, t1), t1: Math.max(t0, t1), f0: Math.min(f0, fAt(ev)), f1: Math.max(f0, fAt(ev)) }
+                     : { type: "range", t0: Math.min(t0, t1), t1: Math.max(t0, t1) };
+        draw();
+      };
+      c.onpointerup = () => {
+        c.onpointermove = c.onpointerup = null;
+        if (!moved) { const laneIdx = [...document.querySelectorAll(".lane canvas")].indexOf(c);
+          if (laneIdx >= 0) { sel = { type: "lane", lane: P.map.lanes[laneIdx] }; renderLanes(); }
+          seek(t0); }
+        renderLayers(); renderCtx(); draw();
+      };
+    };
+  });
+}
+
+// ---- actions ------------------------------------------------------------------------------------
+async function extract(name, promptText, ranges) {
+  try {
+    await api("/api/extract", { source: rest().id, name, prompt: promptText, ranges });
+    job.busy = true; renderCtx(); watch();
+  } catch (e) { status(e.message, true); }
+}
+async function watch() {
+  job = await api("/api/job");
+  $("progress").style.width = job.busy ? `${Math.max(3, job.progress * 100)}%` : "0";
+  if (job.busy) { status(job.message); return setTimeout(watch, 500); }
+  if (job.error) return status(job.error, true);
+  sel = null;
+  await show(await api("/api/project"));
+  status(`${job.message}. It’s now its own layer on the left — mute it to remove it.`);
+}
+async function split(kind, source, box) {
+  status("Splitting…");
+  try { sel = null; await show(await api("/api/split", { kind, source, box })); status("Done — the new layers are on the left."); }
+  catch (e) { status(e.message, true); }
+}
+$("byname").onclick = () => {
+  const name = $("name").value.trim();
+  if (!name) return $("name").focus();
+  const ranges = sel?.type === "range" || sel?.type === "box" ? [[sel.t0, sel.t1]] : sel?.type === "lane" ? sel.lane.segments : [[0, P.duration]];
+  extract(name[0].toUpperCase() + name.slice(1), name, ranges);
+  $("name").value = "";
+};
+$("name").onkeydown = (e) => { if (e.key === "Enter") $("byname").click(); };
+$("export").onclick = async () => {
+  const g = {}; P.layers.forEach((l) => (g[l.id] = level(l.id)));
+  const r = await api("/api/export", { gains: g });
+  status(`Saved each layer plus your mix to ${r.folder}`);
+};
+$("play").onclick = () => (playing ? stop() : play());
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.code === "Space") { e.preventDefault(); playing ? stop() : play(); }
+  if (e.key === "Escape") { sel = null; renderLanes(); renderLayers(); renderCtx(); draw(); }
+});
+
+// ---- opening files ------------------------------------------------------------------------------
+$("open").onclick = $("choose").onclick = () => $("picker").click();
+$("picker").onchange = (e) => e.target.files[0] && upload(e.target.files[0]);
+addEventListener("dragover", (e) => { e.preventDefault(); $("drop").hidden = false; $("drop").classList.add("over"); });
+addEventListener("dragleave", (e) => { if (!e.relatedTarget) { $("drop").classList.remove("over"); if (P) $("drop").hidden = true; } });
+addEventListener("drop", (e) => { e.preventDefault(); $("drop").classList.remove("over"); const f = e.dataTransfer.files[0]; if (f) upload(f); });
+
+api("/api/project").then((p) => p.name && show(p, true));
+</script>
+</body>
+</html>
